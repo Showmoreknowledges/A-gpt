@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 
@@ -35,3 +35,18 @@ class NodeProperty:
     neigh: NeighborhoodSummary
     node_type: Optional[str] = None
     graph_type: Optional[str] = None
+    cross_layer: Optional["CrossLayerInfo"] = None
+
+
+@dataclass(slots=True)
+class CrossLayerInfo:
+    """Hop-aware cross-layer cues derived from anchor supervision."""
+
+    anchor_pair_index: Optional[int] = None
+    nearest_anchor: Optional[int] = None
+    mirror_anchor: Optional[int] = None
+    hop_distance: Optional[int] = None
+    hop_token: str = "<hop-unk>"
+    mirror_candidates: List[int] = field(default_factory=list)
+    path_to_anchor: List[int] = field(default_factory=list)
+    path_struct_profile: List[float] = field(default_factory=list)

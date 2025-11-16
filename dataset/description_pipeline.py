@@ -48,4 +48,13 @@ def generate_descriptions_for_graph(
                 "struct_desc": struct_desc,
                 "sem_desc": sem_desc,
             }
+            cross_layer = prop.cross_layer
+            if cross_layer is not None:
+                record["hop_token"] = cross_layer.hop_token
+                record["hop_distance"] = cross_layer.hop_distance
+                record["nearest_anchor"] = cross_layer.nearest_anchor
+                if cross_layer.path_to_anchor:
+                    record["path_to_anchor"] = cross_layer.path_to_anchor
+                if cross_layer.path_struct_profile:
+                    record["path_struct_profile"] = cross_layer.path_struct_profile
             f.write(json.dumps(record, ensure_ascii=False) + "\n")

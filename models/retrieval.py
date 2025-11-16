@@ -24,11 +24,19 @@ def cosine_sim(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 class Retriever:
     """Combine multiple similarity channels to build coarse candidate lists."""
 
-    def __init__(self, alpha: float = 1.0, beta: float = 0.5, gamma: float = 0.5, delta: float = 0.5):
+    def __init__(
+        self,
+        alpha: float = 1.0,
+        beta: float = 0.5,
+        gamma: float = 0.5,
+        delta: float = 0.5,
+        cross_weight: float = 0.25,
+    ):
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
         self.delta = delta
+        self.cross_weight = cross_weight
 
     def _get_extra(
         self,
@@ -56,12 +64,22 @@ class Retriever:
             neighbor = self._get_extra("neighbor", base, extra_sims)
             attr = self._get_extra("attr", base, extra_sims)
             text = self._get_extra("text", base, extra_sims)
+            cross = self._get_extra("cross", base, extra_sims)
 
             for tensor in (neighbor, attr, text):
                 if tensor.shape != base.shape:
                     raise ValueError("Extra similarity matrices must match cosine map shape.")
 
-            scores = scores + self.beta * neighbor + self.gamma * attr + self.delta * text
+            if cross.shape != base.shape:
+                raise ValueError("Cross-layer similarity matrix must match cosine map shape.")
+
+            scores = (
+                scores
+                + self.beta * neighbor
+                + self.gamma * attr
+                + self.delta * text
+                + self.cross_weight * cross
+            )
 
         return scores
 

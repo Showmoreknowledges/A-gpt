@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
-from src.data.dataset_loader import load_graph_pair
-from src.data.description_pipeline import generate_descriptions_for_graph
-from src.data.node_property import compute_node_properties
-from src.data.schema import NodeProperty
-from src.llm.runtime import build_llm_client
-from src.llm.providers import LLMClient
+from dataset.cross_layer import compute_cross_layer_contexts
+from dataset.dataset_loader import load_graph_pair
+from dataset.description_pipeline import generate_descriptions_for_graph
+from dataset.node_property import compute_node_properties
+from dataset.schema import NodeProperty
+from LLM.providers import LLMClient
+from LLM.runtime import build_llm_client
+from special_tokens import collect_hop_tokens
 
 
 def _parse_args() -> argparse.Namespace:
@@ -105,7 +107,7 @@ def _load_optional_texts(path: Optional[Path], expected: int) -> Optional[List[s
     return lines
 
 
-def _build_client(args: argparse.Namespace):
+def _build_client(args: argparse.Namespace, *, special_tokens: Sequence[str] | None) -> LLMClient:
     return build_llm_client(
         args.llm_backend,
         api_key=args.llm_api_key,
@@ -115,6 +117,7 @@ def _build_client(args: argparse.Namespace):
         hf_task=args.hf_task,
         hf_device=args.hf_device,
         generation_kwargs={"max_new_tokens": args.hf_max_new_tokens},
+        special_tokens=special_tokens,
     )
 
 
@@ -139,11 +142,18 @@ def _write_descriptions(
 
 def main() -> None:
     args = _parse_args()
-    client = _build_client(args)
     graph_pair = load_graph_pair(args.npz_path)
+    ctx_a, ctx_b = compute_cross_layer_contexts(graph_pair)
+    hop_tokens = collect_hop_tokens(list(ctx_a) + list(ctx_b))
+    client = _build_client(args, special_tokens=hop_tokens)
 
     props_a = compute_node_properties(graph_pair.graph_a, graph_type=args.graph_a_label)
     props_b = compute_node_properties(graph_pair.graph_b, graph_type=args.graph_b_label)
+
+    for prop, ctx in zip(props_a, ctx_a):
+        prop.cross_layer = ctx
+    for prop, ctx in zip(props_b, ctx_b):
+        prop.cross_layer = ctx
 
     texts_a = _load_optional_texts(args.text_a, len(props_a)) if args.text_a else None
     texts_b = _load_optional_texts(args.text_b, len(props_b)) if args.text_b else None

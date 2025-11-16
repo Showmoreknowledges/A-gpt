@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Mapping, MutableMapping
+from typing import Any, Mapping, MutableMapping, Sequence
 
 from .providers import (
     DeepSeekClient,
@@ -12,6 +12,35 @@ from .providers import (
     LLMClient,
     OpenAIClient,
 )
+
+
+def _register_special_tokens_for_pipeline(pipeline: Any, tokens: Sequence[str] | None) -> None:
+    if not tokens:
+        return
+
+    tokenizer = getattr(pipeline, "tokenizer", None)
+    model = getattr(pipeline, "model", None)
+    if tokenizer is None or not hasattr(tokenizer, "add_special_tokens"):
+        return
+
+    vocab = set()
+    if hasattr(tokenizer, "get_vocab"):
+        vocab_dict = tokenizer.get_vocab()
+        vocab.update(vocab_dict.keys())
+
+    unique: list[str] = []
+    for tok in tokens:
+        if tok in vocab:
+            continue
+        if tok not in unique:
+            unique.append(tok)
+
+    if not unique:
+        return
+
+    tokenizer.add_special_tokens({"additional_special_tokens": unique})
+    if model is not None and hasattr(model, "resize_token_embeddings"):
+        model.resize_token_embeddings(len(tokenizer))
 
 
 def build_llm_client(kind: str, **kwargs: Any) -> LLMClient:
@@ -25,6 +54,7 @@ def build_llm_client(kind: str, **kwargs: Any) -> LLMClient:
         Backend-specific configuration such as API keys or HuggingFace model names.
     """
 
+    special_tokens = kwargs.pop("special_tokens", None)
     kind = kind.lower()
     if kind == "echo":
         return EchoClient(suffix=str(kwargs.get("echo_suffix", "")))
@@ -73,6 +103,7 @@ def build_llm_client(kind: str, **kwargs: Any) -> LLMClient:
             pipeline_kwargs["revision"] = kwargs["hf_revision"]
 
         pipe = hf_pipeline(task, model=model_name, **pipeline_kwargs)
+        _register_special_tokens_for_pipeline(pipe, special_tokens)
         return HFLocalClient(pipeline=pipe, generation_kwargs=dict(generation_kwargs))
 
     raise ValueError(f"Unsupported LLM backend: {kind}")
